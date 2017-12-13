@@ -1071,6 +1071,27 @@ const char *ssl_cmd_SSLCipherSuite(cmd_parms *cmd,
 
 #define SSL_FLAGS_CHECK_DIR \
     (SSL_PCM_EXISTS|SSL_PCM_ISDIR)
+#if defined(HAVE_OPENSSL_ENGINE_H) && defined(HAVE_ENGINE_INIT)
+static const char *ssl_cmd_check_pkcs11_uri(cmd_parms *parms,
+                                            const char **uri)
+{
+    if ((uri == NULL) || (*uri == NULL)) {
+        return apr_pstrcat(parms->pool, parms->cmd->name,
+                           ": Invalid or empty URI", NULL);
+    }
+
+    /* 
+     * Pre-parsing to get the protocol.
+     * The only supported protocol at the moment is the PKCS#11 URI
+     */
+    if (strncmp(*uri, "pkcs11:", 7)) {
+        return apr_pstrcat(parms->pool, parms->cmd->name,
+                           ": Invalid URI; unknown protocol", NULL);
+    }
+
+    return NULL;
+}
+#endif
 
 static const char *ssl_cmd_check_file(cmd_parms *parms,
                                       const char **file)
@@ -1184,9 +1205,20 @@ const char *ssl_cmd_SSLCertificateFile(cmd_parms *cmd,
     SSLSrvConfigRec *sc = mySrvConfig(cmd->server);
     const char *err;
 
+#if defined(HAVE_OPENSSL_ENGINE_H) && defined(HAVE_ENGINE_INIT)
+    /*
+     * First, test if it is a PKCS#11 URI and, if it fails, as a file
+     */
+    if ((err = ssl_cmd_check_pkcs11_uri(cmd, &arg))) {
+        if ((err = ssl_cmd_check_file(cmd, &arg))) {
+            return err;
+        }
+    }
+#else
     if ((err = ssl_cmd_check_file(cmd, &arg))) {
         return err;
     }
+#endif
 
     *(const char **)apr_array_push(sc->server->pks->cert_files) = arg;
     
@@ -1200,9 +1232,20 @@ const char *ssl_cmd_SSLCertificateKeyFile(cmd_parms *cmd,
     SSLSrvConfigRec *sc = mySrvConfig(cmd->server);
     const char *err;
 
+#if defined(HAVE_OPENSSL_ENGINE_H) && defined(HAVE_ENGINE_INIT)
+    /*
+     * First, test if it is a PKCS#11 URI and, if it fails, as a file
+     */
+    if ((err = ssl_cmd_check_pkcs11_uri(cmd, &arg))) {
+        if ((err = ssl_cmd_check_file(cmd, &arg))) {
+            return err;
+        }
+    }
+#else
     if ((err = ssl_cmd_check_file(cmd, &arg))) {
         return err;
     }
+#endif
 
     *(const char **)apr_array_push(sc->server->pks->key_files) = arg;
 
