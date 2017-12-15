@@ -1066,14 +1066,35 @@ const char *ssl_cmd_SSLCipherSuite(cmd_parms *cmd,
 #define SSL_FLAGS_CHECK_DIR \
     (SSL_PCM_EXISTS|SSL_PCM_ISDIR)
 
+#if defined(HAVE_OPENSSL_ENGINE_H) && defined(HAVE_ENGINE_INIT)
+static int ssl_cmd_check_pkcs11_uri(cmd_parms *parms,
+                                    const char **uri)
+{
+    if ((uri == NULL) || (*uri == NULL)) {
+        return -1;
+    }
+
+    if (strncmp(*uri, "pkcs11:", 7)) {
+        return -2;
+    }
+
+    return 0;
+}
+#endif
+
 static const char *ssl_cmd_check_file(cmd_parms *parms,
                                       const char **file)
 {
     const char *filepath = ap_server_root_relative(parms->pool, *file);
 
     if (!filepath) {
+#if defined(HAVE_OPENSSL_ENGINE_H) && defined(HAVE_ENGINE_INIT)
+        return apr_pstrcat(parms->pool, parms->cmd->name,
+                           ": Invalid file path or PKCS#11 URI ", *file, NULL);
+#else
         return apr_pstrcat(parms->pool, parms->cmd->name,
                            ": Invalid file path ", *file, NULL);
+#endif
     }
     *file = filepath;
 
@@ -1081,10 +1102,15 @@ static const char *ssl_cmd_check_file(cmd_parms *parms,
         return NULL;
     }
 
+#if defined(HAVE_OPENSSL_ENGINE_H) && defined(HAVE_ENGINE_INIT)
+    return apr_pstrcat(parms->pool, parms->cmd->name,
+                       ": Invalid PKCS#11 URI or file '", *file,
+                       "' does not exist or is empty", NULL);
+#else
     return apr_pstrcat(parms->pool, parms->cmd->name,
                        ": file '", *file,
                        "' does not exist or is empty", NULL);
-
+#endif
 }
 
 const char *ssl_cmd_SSLCompression(cmd_parms *cmd, void *dcfg, int flag)
@@ -1178,9 +1204,20 @@ const char *ssl_cmd_SSLCertificateFile(cmd_parms *cmd,
     SSLSrvConfigRec *sc = mySrvConfig(cmd->server);
     const char *err;
 
+#if defined(HAVE_OPENSSL_ENGINE_H) && defined(HAVE_ENGINE_INIT)
+    /*
+     * First, test if it is a PKCS#11 URI and, if it fails, treat as a file
+     */
+    if ((ssl_cmd_check_pkcs11_uri(cmd, &arg))) {
+        if ((err = ssl_cmd_check_file(cmd, &arg))) {
+            return err;
+        }
+    }
+#else
     if ((err = ssl_cmd_check_file(cmd, &arg))) {
         return err;
     }
+#endif
 
     *(const char **)apr_array_push(sc->server->pks->cert_files) = arg;
     
@@ -1194,9 +1231,20 @@ const char *ssl_cmd_SSLCertificateKeyFile(cmd_parms *cmd,
     SSLSrvConfigRec *sc = mySrvConfig(cmd->server);
     const char *err;
 
+#if defined(HAVE_OPENSSL_ENGINE_H) && defined(HAVE_ENGINE_INIT)
+    /*
+     * First, test if it is a PKCS#11 URI and, if it fails, treat as a file
+     */
+    if (ssl_cmd_check_pkcs11_uri(cmd, &arg)) {
+        if ((err = ssl_cmd_check_file(cmd, &arg))) {
+            return err;
+        }
+    }
+#else
     if ((err = ssl_cmd_check_file(cmd, &arg))) {
         return err;
     }
+#endif
 
     *(const char **)apr_array_push(sc->server->pks->key_files) = arg;
 

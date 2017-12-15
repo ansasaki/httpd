@@ -600,3 +600,74 @@ int ssl_pphrase_Handle_CB(char *buf, int bufsize, int verify, void *srv)
      */
     return (len);
 }
+
+#if defined(HAVE_OPENSSL_ENGINE_H) && defined(HAVE_ENGINE_INIT)
+apr_status_t ssl_engine_load_pkey(server_rec *s, apr_pool_t *p, int idx,
+                                  const char *pkey_file,
+				                  EVP_PKEY **ppkey)
+{
+    SSLModConfigRec *mc = myModConfig(s);
+    SSLSrvConfigRec *sc = mySrvConfig(s);
+    EVP_PKEY *pPrivateKey = NULL;
+    ENGINE *e;
+
+    const char *key_id = asn1_table_vhost_key(mc, p, sc->vhost_id, idx);
+
+    UI_METHOD *ui_method;
+
+    if (ppkey == NULL) {
+        ap_log_error(APLOG_MARK, APLOG_EMERG, 0, s, APLOGNO()
+                     "Init: Failed to load Crypto Device API `%s'",
+                     mc->szCryptoDevice);
+	    return ssl_die(s);
+    }
+
+    /*
+     * Using the builtin OpenSSL UI
+     */
+    ui_method = UI_OpenSSL();
+
+    /* Try to use an engine, if available, to load the file/URL */
+    if (mc->szCryptoDevice) {
+        if (!(e = ENGINE_by_id(mc->szCryptoDevice))) {
+            ap_log_error(APLOG_MARK, APLOG_EMERG, 0, s, APLOGNO()
+                         "Init: Failed to load Crypto Device API `%s'",
+                         mc->szCryptoDevice);
+            ssl_log_ssl_error(SSLLOG_MARK, APLOG_EMERG, s);
+            return ssl_die(s);
+        }
+
+        if (APLOGdebug(s)) {
+            ENGINE_ctrl_cmd_string(e, "VERBOSE", NULL, 0);
+        }
+
+        if (ENGINE_init(e)) {
+            pPrivateKey = ENGINE_load_private_key(e, pkey_file, ui_method,
+                                                  NULL);
+
+            if (pPrivateKey == NULL) {
+                ap_log_error(APLOG_MARK, APLOG_EMERG, 0, s, APLOGNO()
+                             "Init: Unable to get the private key");
+                ssl_log_ssl_error(SSLLOG_MARK, APLOG_EMERG, s);
+                return ssl_die(s);
+            }
+
+            *ppkey = pPrivateKey;
+
+            ENGINE_free(e);
+            return APR_SUCCESS;
+        }
+        else {
+            ap_log_error(APLOG_MARK, APLOG_EMERG, 0, s, APLOGNO()
+                    "Init: Unable to initialize the engine");
+            ssl_log_ssl_error(SSLLOG_MARK, APLOG_EMERG, s);
+            return ssl_die(s);
+        }
+    }
+
+    ap_log_error(APLOG_MARK, APLOG_EMERG, 0, s, APLOGNO()
+            "Init: No crypto device");
+    ssl_log_ssl_error(SSLLOG_MARK, APLOG_EMERG, s);
+    return ssl_die(s);
+}
+#endif
