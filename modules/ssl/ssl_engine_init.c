@@ -1268,18 +1268,30 @@ static apr_status_t ssl_init_server_certs(server_rec *s,
 
             ERR_clear_error();
 
-            /* perhaps it's an encrypted private key, so try again */
-            ssl_load_encrypted_pkey(s, ptemp, i, keyfile, &pphrases);
+            /* 
+             * TODO: add ifdef here to remove this try when there is no engine
+             */
+            ssl_load_engine_pkey(s, ptemp, i, keyfile, &pphrases, &pkey);
 
-            if (!(asn1 = ssl_asn1_table_get(mc->tPrivateKey, key_id)) ||
-                !(ptr = asn1->cpData) ||
-                !(pkey = d2i_AutoPrivateKey(NULL, &ptr, asn1->nData)) ||
-                (SSL_CTX_use_PrivateKey(mctx->ssl_ctx, pkey) < 1)) {
-                ap_log_error(APLOG_MARK, APLOG_EMERG, 0, s, APLOGNO(02564)
-                             "Failed to configure encrypted (?) private key %s,"
-                             " check %s", key_id, keyfile);
-                ssl_log_ssl_error(SSLLOG_MARK, APLOG_EMERG, s);
-                return APR_EGENERAL;
+            if (SSL_CTX_use_PrivateKey(mctx->ssl_ctx, pkey) < 1) {
+                /* TODO: LOG properly */
+                ap_log_error(APLOG_MARK, APLOG_INFO, 0, s, APLOGNO(02564)
+                        "Failed to configure key %s using engine. Now trying to"
+                        " open %s", key_id, keyfile);
+
+                /* perhaps it's an encrypted private key, so try again */
+                ssl_load_encrypted_pkey(s, ptemp, i, keyfile, &pphrases);
+
+                if (!(asn1 = ssl_asn1_table_get(mc->tPrivateKey, key_id)) ||
+                    !(ptr = asn1->cpData) ||
+                    !(pkey = d2i_AutoPrivateKey(NULL, &ptr, asn1->nData)) ||
+                    (SSL_CTX_use_PrivateKey(mctx->ssl_ctx, pkey) < 1)) {
+                    ap_log_error(APLOG_MARK, APLOG_EMERG, 0, s, APLOGNO(02564)
+                                 "Failed to configure encrypted (?) private key %s,"
+                                 " check %s", key_id, keyfile);
+                    ssl_log_ssl_error(SSLLOG_MARK, APLOG_EMERG, s);
+                    return APR_EGENERAL;
+                }
             }
         }
 

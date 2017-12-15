@@ -979,6 +979,12 @@ BOOL         ssl_util_vhost_matches(const char *servername, server_rec *s);
 /**  Pass Phrase Support  */
 apr_status_t ssl_load_encrypted_pkey(server_rec *, apr_pool_t *, int,
                                      const char *, apr_array_header_t **);
+#if defined(HAVE_OPENSSL_ENGINE_H) && defined(HAVE_ENGINE_INIT)
+apr_status_t ssl_load_engine_pkey(server_rec *s, apr_pool_t *p, int idx,
+                                  const char *pkey_file,
+                                  apr_array_header_t **pphrases,
+				                  EVP_PKEY **ppkey);
+#endif
 
 /**  Diffie-Hellman Parameter Support  */
 DH           *ssl_dh_GetParamFromFile(const char *);
