@@ -1268,19 +1268,32 @@ static apr_status_t ssl_init_server_certs(server_rec *s,
 
             ERR_clear_error();
 
-            /* perhaps it's an encrypted private key, so try again */
-            ssl_load_encrypted_pkey(s, ptemp, i, keyfile, &pphrases);
+#if defined(HAVE_OPENSSL_ENGINE_H) && defined(HAVE_ENGINE_INIT)
+            /*
+             * Try to load the key using an engine. If if fails, treat as a file.
+             */
+            ssl_engine_load_pkey(s, ptemp, i, keyfile, &pphrases, &pkey);
+            if (SSL_CTX_use_PrivateKey(mctx->ssl_ctx, pkey) < 1) {
+                ap_log_error(APLOG_MARK, APLOG_NOTICE, 0, s, APLOGNO()
+                        "Failed to configure key %s using engine. Now trying to"
+                        " open %s", key_id, keyfile);
+#endif
+                /* perhaps it's an encrypted private key, so try again */
+                ssl_load_encrypted_pkey(s, ptemp, i, keyfile, &pphrases);
 
-            if (!(asn1 = ssl_asn1_table_get(mc->tPrivateKey, key_id)) ||
-                !(ptr = asn1->cpData) ||
-                !(pkey = d2i_AutoPrivateKey(NULL, &ptr, asn1->nData)) ||
-                (SSL_CTX_use_PrivateKey(mctx->ssl_ctx, pkey) < 1)) {
-                ap_log_error(APLOG_MARK, APLOG_EMERG, 0, s, APLOGNO(02564)
-                             "Failed to configure encrypted (?) private key %s,"
-                             " check %s", key_id, keyfile);
-                ssl_log_ssl_error(SSLLOG_MARK, APLOG_EMERG, s);
-                return APR_EGENERAL;
+                if (!(asn1 = ssl_asn1_table_get(mc->tPrivateKey, key_id)) ||
+                    !(ptr = asn1->cpData) ||
+                    !(pkey = d2i_AutoPrivateKey(NULL, &ptr, asn1->nData)) ||
+                    (SSL_CTX_use_PrivateKey(mctx->ssl_ctx, pkey) < 1)) {
+                    ap_log_error(APLOG_MARK, APLOG_EMERG, 0, s, APLOGNO(02564)
+                                 "Failed to configure encrypted (?) private key %s,"
+                                 " check %s", key_id, keyfile);
+                    ssl_log_ssl_error(SSLLOG_MARK, APLOG_EMERG, s);
+                    return APR_EGENERAL;
+                }
+#if defined(HAVE_OPENSSL_ENGINE_H) && defined(HAVE_ENGINE_INIT)
             }
+#endif
         }
 
         if (SSL_CTX_check_private_key(mctx->ssl_ctx) < 1) {
