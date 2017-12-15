@@ -1272,7 +1272,7 @@ static apr_status_t ssl_init_server_certs(server_rec *s,
             /*
              * Try to load the key using an engine. If if fails, treat as a file.
              */
-            ssl_engine_load_pkey(s, ptemp, i, keyfile, &pkey);
+            ssl_engine_load_pkey(s, ptemp, i, keyfile, &pphrases, &pkey);
             if (SSL_CTX_use_PrivateKey(mctx->ssl_ctx, pkey) < 1) {
                 ap_log_error(APLOG_MARK, APLOG_NOTICE, 0, s, APLOGNO()
                         "Failed to configure key %s using engine. Now trying to"

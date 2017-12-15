@@ -982,7 +982,8 @@ apr_status_t ssl_load_encrypted_pkey(server_rec *, apr_pool_t *, int,
 #if defined(HAVE_OPENSSL_ENGINE_H) && defined(HAVE_ENGINE_INIT)
 apr_status_t ssl_engine_load_pkey(server_rec *s, apr_pool_t *p, int idx,
                                   const char *pkey_file,
-				                  EVP_PKEY **ppkey);
+                                  apr_array_header_t **pphrases,
+                                  EVP_PKEY **ppkey);
 #endif
 
 /**  Diffie-Hellman Parameter Support  */
